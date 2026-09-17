@@ -1,0 +1,136 @@
+```gitignore
+
+temp-linux  
+# ==============================
+# Python
+# ==============================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+whisper-rocm/
+*.egg-info/
+
+# ==============================
+# Environment / Secrets
+# ==============================
+
+.env
+.env.*
+!.env.example
+
+*.key
+*.pem
+secrets/
+credentials/
+
+# ==============================
+# Models
+# ==============================
+
+# GGUF / LLM models
+*.gguf
+*.ggml
+*.bin
+
+# Piper models
+*.onnx
+*.onnx.json
+
+# Other ML model files
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+
+# Model directories
+models/
+checkpoints/
+weights/
+
+# ==============================
+# Audio
+# ==============================
+
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.aac
+*.raw
+
+# Generated audio / recordings
+audio/
+recordings/
+output/
+outputs/
+
+# ==============================
+# Logs
+# ==============================
+
+*.log
+logs/
+
+# ==============================
+# Temporary files
+# ==============================
+
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+.DS_Store
+
+# ==============================
+# IDE / Editors
+# ==============================
+
+.vscode/
+.idea/
+*.code-workspace
+
+# ==============================
+# Jupyter
+# ==============================
+
+.ipynb_checkpoints/
+
+# ==============================
+# OS
+# ==============================
+
+.DS_Store
+Thumbs.db
+
+# ==============================
+# Build / Distribution
+# ==============================
+
+build/
+dist/
+
+# ==============================
+# Project-specific
+# ==============================
+
+# Test audio
+test.wav
+test_*.wav
+
+# Local startup/debug files
+*.pid
+
+# Docker local files
+docker-data/
+```
