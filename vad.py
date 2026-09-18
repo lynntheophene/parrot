@@ -1,10 +1,14 @@
 import torch
 from silero_vad import load_silero_vad
-
+import threading
 
 class SileroVAD:
 
     def __init__(self):
+
+        self.speaking = False
+        self.paplay_process = None
+        self.lock = threading.Lock()
 
         print("Loading Silero VAD...")
 
