@@ -1,0 +1,173 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #20283a,
+            #090b10 60%
+        );
+
+    color: white;
+
+    font-family:
+        Inter,
+        system-ui,
+        sans-serif;
+}
+
+.container {
+    width: min(700px, 92vw);
+    text-align: center;
+}
+
+h1 {
+    font-size: 42px;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    color: #9ca3af;
+    margin-bottom: 45px;
+}
+
+.orb {
+    width: 190px;
+    height: 190px;
+
+    margin: auto;
+
+    border-radius: 50%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+        radial-gradient(
+            circle,
+            #303b56,
+            #141925
+        );
+
+    box-shadow:
+        0 0 60px rgba(
+            80,
+            120,
+            255,
+            0.25
+        );
+
+    transition: 0.3s;
+}
+
+.orb.listening {
+    transform: scale(1.08);
+
+    box-shadow:
+        0 0 80px rgba(
+            70,
+            140,
+            255,
+            0.7
+        );
+}
+
+.orb.processing {
+    animation:
+        pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.08);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.mic {
+    font-size: 65px;
+}
+
+button {
+    margin-top: 45px;
+
+    border: none;
+
+    padding: 16px 34px;
+
+    border-radius: 30px;
+
+    font-size: 17px;
+
+    cursor: pointer;
+
+    background: white;
+    color: #111;
+
+    transition: 0.2s;
+}
+
+button:hover {
+    transform: scale(1.04);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.status {
+    margin-top: 25px;
+
+    color: #9ca3af;
+
+    min-height: 24px;
+}
+
+.conversation {
+    margin-top: 45px;
+
+    text-align: left;
+}
+
+.message {
+    margin-bottom: 18px;
+
+    padding: 16px 20px;
+
+    border-radius: 15px;
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.06
+        );
+}
+
+.label {
+    font-size: 12px;
+
+    color: #8b95a7;
+
+    margin-bottom: 6px;
+}
