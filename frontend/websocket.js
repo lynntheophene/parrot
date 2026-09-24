@@ -9,7 +9,7 @@ import {
 
 import {
     stopAssistantAudio,
-    playAudio
+    enqueueAudio
 } from "./audio.js";
 
 
@@ -75,7 +75,7 @@ export function connectWebSocket() {
 
 
                     // Binary WAV
-                    await playAudio(
+                    enqueueAudio(
                         event.data
                     );
                 };
@@ -237,13 +237,12 @@ function handleMessage(message) {
         // RESPONSE
         // ==========================
 
-        case "response":
-
+        case "response_chunk":
             addMessage(
                 "Assistant",
                 message.text
             );
-
+            
             break;
 
 

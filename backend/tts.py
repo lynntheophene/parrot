@@ -7,6 +7,7 @@ import threading
 class PiperTTS:
 
     def __init__(self):
+
         self.piper = os.path.expanduser(
             "~/piper/piper/piper"
         )
@@ -16,9 +17,11 @@ class PiperTTS:
         )
 
         self.process = None
+
         self.lock = threading.Lock()
 
         print("Piper TTS ready.")
+
 
     def generate(self, text):
 
@@ -36,6 +39,7 @@ class PiperTTS:
 
                 wav_file = f.name
 
+
             with self.lock:
 
                 self.process = subprocess.Popen(
@@ -46,40 +50,58 @@ class PiperTTS:
                         "--output_file",
                         wav_file,
                     ],
+
                     stdin=subprocess.PIPE,
+
                     stdout=subprocess.DEVNULL,
+
                     stderr=subprocess.DEVNULL,
                 )
+
 
             self.process.communicate(
                 input=text.encode("utf-8")
             )
 
+
             with self.lock:
                 self.process = None
+
 
             if not os.path.exists(wav_file):
                 return b""
 
+
             with open(wav_file, "rb") as f:
                 return f.read()
 
+
         except Exception as e:
 
-            print(f"Piper TTS error: {e}")
+            print(
+                f"Piper TTS error: {e}"
+            )
+
             return b""
+
 
         finally:
 
             with self.lock:
                 self.process = None
 
-            if wav_file and os.path.exists(wav_file):
+
+            if (
+                wav_file
+                and os.path.exists(wav_file)
+            ):
 
                 try:
                     os.remove(wav_file)
+
                 except Exception:
                     pass
+
 
     def stop(self):
 
@@ -87,12 +109,20 @@ class PiperTTS:
 
             if self.process is not None:
 
+                print(
+                    "🛑 Stopping Piper"
+                )
+
                 try:
+
                     self.process.kill()
+
                 except Exception:
                     pass
 
                 self.process = None
 
+
     def close(self):
+
         self.stop()

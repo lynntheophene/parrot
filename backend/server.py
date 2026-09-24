@@ -6,14 +6,18 @@ from .llm import LocalLLM
 from .tts import PiperTTS
 import numpy as np
 import asyncio
+import threading
+import time
 
 SAMPLE_RATE = 16000
-SILENCE_DURATION = 1.0
+SILENCE_DURATION = 0.7
 VAD_CHUNK_SIZE = 512
 
 SILENCE_CHUNKS = int(
     SILENCE_DURATION * SAMPLE_RATE / VAD_CHUNK_SIZE
 )
+
+
 
 app = FastAPI(
     title="Voice Agent API",
@@ -51,6 +55,54 @@ async def health():
         "status": "healthy"
     }
 
+
+def sentence_chunks(token_stream):
+    """
+    Convert streamed LLM tokens into sentence-sized chunks.
+    """
+
+    buffer = ""
+
+    for token in token_stream:
+
+        buffer += token
+
+        # Check the whole buffer, not just the latest token
+        if buffer.rstrip().endswith((".", "!", "?")):
+
+            sentence = buffer.strip()
+
+            if sentence:
+                yield sentence
+
+            buffer = ""
+
+    # Send remaining text
+    if buffer.strip():
+        yield buffer.strip()
+
+async def sentence_chunks_async(token_stream):
+    """
+    Convert an async LLM token stream into sentence-sized chunks.
+    """
+
+    buffer = ""
+
+    async for token in token_stream:
+
+        buffer += token
+
+        if buffer.rstrip().endswith((".", "!", "?")):
+
+            sentence = buffer.strip()
+
+            if sentence:
+                yield sentence
+
+            buffer = ""
+
+    if buffer.strip():
+        yield buffer.strip()      
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -244,6 +296,58 @@ async def websocket_endpoint(websocket: WebSocket):
 
         print("Session cleaned up")
 
+async def async_llm_stream(llm, text, stop_event):
+    """
+    Runs the synchronous LLM stream in a background thread
+    and forwards tokens into the asyncio event loop.
+    """
+
+    queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def worker():
+        try:
+            for token in llm.stream(
+                text,
+                stop_event=stop_event
+            ):
+                asyncio.run_coroutine_threadsafe(
+                    queue.put(("token", token)),
+                    loop
+                ).result()
+
+            asyncio.run_coroutine_threadsafe(
+                queue.put(("done", None)),
+                loop
+            ).result()
+
+        except Exception as e:
+            asyncio.run_coroutine_threadsafe(
+                queue.put(("error", e)),
+                loop
+            ).result()
+
+    asyncio.create_task(asyncio.to_thread(worker))
+
+    completed = False
+
+    try:
+        while True:
+            kind, value = await queue.get()
+
+            if kind == "token":
+                yield value
+
+            elif kind == "done":
+                completed = True
+                break
+
+            elif kind == "error":
+                raise value
+
+    finally:
+        if not completed:
+            stop_event.set()
 
 async def process_utterance(
     websocket,
@@ -255,7 +359,7 @@ async def process_utterance(
 ):
 
     try:
-
+        request_start = time.perf_counter()
         # =========================
         # STT
         # =========================
@@ -265,10 +369,14 @@ async def process_utterance(
             "stage": "stt"
         })
 
+        stt_start = time.perf_counter() # stt timer
+
         text = await asyncio.to_thread(
             stt.transcribe,
             audio
         )
+        stt_latency = time.perf_counter() - stt_start
+        print(f"⏱ STT latency: {stt_latency:.3f}s")
 
         # Check whether user interrupted us
         if my_generation != get_generation():
@@ -297,9 +405,9 @@ async def process_utterance(
         })
 
 
-        # =========================
-        # LLM
-        # =========================
+        # ==========================================
+        # STREAMING LLM + TTS
+        # ==========================================
 
         if my_generation != get_generation():
 
@@ -309,82 +417,141 @@ async def process_utterance(
 
             return
 
+
         await websocket.send_json({
             "type": "processing",
             "stage": "llm"
         })
 
-        response = await asyncio.to_thread(
-            llm.generate,
-            text
-        )
-
-        # CRITICAL CHECK
-        if my_generation != get_generation():
-
-            print(
-                "OLD LLM RESPONSE DISCARDED"
-            )
-
-            return
 
         print(
-            f"Assistant: {response}"
+            f"Starting streaming response "
+            f"generation={my_generation}"
         )
 
-        await websocket.send_json({
-            "type": "response",
-            "text": response
-        })
+
+        # Get the token generator.
+        stop_event = threading.Event()
+
+        full_response = ""
+
+        token_stream = async_llm_stream(
+            llm,
+            text,
+            stop_event
+        )
+        llm_start = time.perf_counter()
+        first_sentence = True
+
+        async for sentence in sentence_chunks_async(token_stream):
+
+            # --------------------------------------
+            # INTERRUPTION CHECK
+            # --------------------------------------
+            if first_sentence:
+                llm_latency = time.perf_counter() - llm_start
+                print(f"LLM → first sentence: {llm_latency:.3f}s")
+                first_sentence = False
+
+            if my_generation != get_generation():
+
+                print("STREAM INTERRUPTED")
+
+                tts.stop()
+
+                return
 
 
-        # =========================
-        # TTS
-        # =========================
+            print(
+                f"Sentence: {sentence}"
+            )
+
+
+            full_response += sentence + " "
+
+
+            # --------------------------------------
+            # SEND TEXT TO FRONTEND
+            # --------------------------------------
+
+            await websocket.send_json({
+                "type": "response_chunk",
+                "text": sentence
+            })
+
+
+            # --------------------------------------
+            # TTS
+            # --------------------------------------
+
+            await websocket.send_json({
+                "type": "processing",
+                "stage": "tts"
+            })
+
+
+            tts_start = time.perf_counter()
+
+            audio_bytes = await asyncio.to_thread(
+                tts.generate,
+                sentence
+            )
+
+            tts_latency = time.perf_counter() - tts_start
+
+            print(f"TTS latency: {tts_latency:.3f}s")
+
+
+            # --------------------------------------
+            # INTERRUPTION CHECK
+            # --------------------------------------
+
+            if my_generation != get_generation():
+
+                print(
+                    "TTS RESULT DISCARDED"
+                )
+
+                tts.stop()
+
+                return
+
+
+            if not audio_bytes:
+
+                continue
+
+
+            print(
+                "Sending sentence audio"
+            )
+
+            total_latency = time.perf_counter() - request_start
+
+            print(
+                f"TOTAL → first audio: "
+                f"{total_latency:.3f}s"
+            )
+
+            await websocket.send_bytes(
+                audio_bytes
+            )
+
+
+        # --------------------------------------
+        # RESPONSE COMPLETE
+        # --------------------------------------
 
         if my_generation != get_generation():
 
-            print(
-                "OLD RESPONSE DISCARDED BEFORE TTS"
-            )
-
             return
+
 
         await websocket.send_json({
-            "type": "processing",
-            "stage": "tts"
+            "type": "response_complete",
+            "text": full_response.strip()
         })
 
-        audio_bytes = await asyncio.to_thread(
-            tts.generate,
-            response
-        )
-
-        # CRITICAL CHECK
-        #
-        # User may have interrupted while Piper
-        # was generating the WAV.
-        #
-
-        if my_generation != get_generation():
-
-            print(
-                "OLD TTS AUDIO DISCARDED"
-            )
-
-            return
-
-        if not audio_bytes:
-
-            return
-
-        print(
-            f"Sending audio generation {my_generation}"
-        )
-
-        await websocket.send_bytes(
-            audio_bytes
-        )
 
         await websocket.send_json({
             "type": "done"

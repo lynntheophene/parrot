@@ -28,7 +28,7 @@ class LocalLLM:
 
         self.max_turns = 20
 
-    def stream(self, text):
+    def stream(self, text, stop_event=None):
 
         # Add user message
         self.messages.append({
@@ -62,59 +62,72 @@ class LocalLLM:
 
         assistant_response = ""
 
-        for line in response.iter_lines():
+        try:
 
-            if not line:
-                continue
+            # chunk_size=1 helps receive streamed tokens sooner
+            for line in response.iter_lines(chunk_size=1):
 
-            if isinstance(line, bytes):
-                line = line.decode("utf-8")
+                # Check if user interrupted
+                if stop_event and stop_event.is_set():
+                    print("LLM stream interrupted")
+                    break
 
-            if not line.startswith("data:"):
-                continue
+                if not line:
+                    continue
 
-            data = line[5:].strip()
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
 
-            if data == "[DONE]":
-                break
+                if not line.startswith("data:"):
+                    continue
 
-            try:
-                chunk = json.loads(data)
-            except json.JSONDecodeError:
-                continue
+                data = line[5:].strip()
 
-            choices = chunk.get(
-                "choices",
-                []
-            )
+                if data == "[DONE]":
+                    break
 
-            if not choices:
-                continue
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
 
-            delta = choices[0].get(
-                "delta",
-                {}
-            )
+                choices = chunk.get(
+                    "choices",
+                    []
+                )
 
-            content = delta.get(
-                "content"
-            )
+                if not choices:
+                    continue
 
-            if content:
+                delta = choices[0].get(
+                    "delta",
+                    {}
+                )
 
-                assistant_response += content
+                content = delta.get(
+                    "content"
+                )
 
-                yield content
+                if content:
+
+                    assistant_response += content
+
+                    yield content
+
+        finally:
+
+            response.close()
 
         # IMPORTANT:
-        # Save the complete response
-        # into this session's memory.
+        # Only save the assistant response if
+        # the generation completed normally.
 
-        self.messages.append({
-            "role": "assistant",
-            "content": assistant_response,
-        })
+        if not stop_event or not stop_event.is_set():
 
+            self.messages.append({
+                "role": "assistant",
+                "content": assistant_response,
+            })
     def generate(self, text):
 
         return "".join(

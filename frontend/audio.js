@@ -1,15 +1,20 @@
 import { state } from "./state.js";
+
 import {
     setStatus,
     setListening
 } from "./ui.js";
 
 
+// ============================================
+// STOP ALL ASSISTANT AUDIO
+// ============================================
+
 export function stopAssistantAudio() {
 
-    console.log(" STOP ASSISTANT AUDIO");
+    console.log("STOP ASSISTANT AUDIO");
 
-    // Invalidate old audio.
+    // Invalidate the current response
     state.audioGeneration++;
 
     console.log(
@@ -17,11 +22,18 @@ export function stopAssistantAudio() {
         state.audioGeneration
     );
 
+    // IMPORTANT:
+    // Clear any sentences waiting to play
+    state.audioQueue = [];
 
+    console.log("Audio queue cleared");
+
+
+    // Stop currently playing audio
     if (state.currentAudio) {
 
         console.log(
-            " Stopping current Audio object"
+            "Stopping current Audio object"
         );
 
         try {
@@ -30,7 +42,6 @@ export function stopAssistantAudio() {
 
             state.currentAudio.currentTime = 0;
 
-            // Completely detach audio.
             state.currentAudio.src = "";
 
             state.currentAudio.load();
@@ -50,6 +61,7 @@ export function stopAssistantAudio() {
     }
 
 
+    // Release object URL
     if (state.currentAudioUrl) {
 
         console.log(
@@ -72,23 +84,95 @@ export function stopAssistantAudio() {
 
         state.currentAudioUrl = null;
     }
+
+    state.audioPlaying = false;
 }
 
 
-export async function playAudio(arrayBuffer) {
+// ============================================
+// ADD AUDIO TO QUEUE
+// ============================================
+
+export function enqueueAudio(arrayBuffer) {
 
     console.log(
-        " RECEIVED ASSISTANT AUDIO"
+        "RECEIVED ASSISTANT AUDIO"
+    );
+
+    // Add this sentence to queue
+    state.audioQueue.push(arrayBuffer);
+
+    console.log(
+        "Audio queue:",
+        state.audioQueue.length
     );
 
 
-    // Kill anything currently playing.
-    stopAssistantAudio();
+    // Start playback only if nothing
+    // is currently playing
+    if (!state.audioPlaying) {
+
+        playNextAudio();
+    }
+}
 
 
-    // Remember which generation this audio belongs to.
+// ============================================
+// PLAY NEXT AUDIO
+// ============================================
+
+async function playNextAudio() {
+
+    // Prevent two audio objects
+    // from playing simultaneously
+    if (state.audioPlaying) {
+
+        console.log(
+            " Audio already playing"
+        );
+
+        return;
+    }
+
+
+    // Nothing left in queue
+    if (state.audioQueue.length === 0) {
+
+        console.log(
+            "AUDIO QUEUE EMPTY"
+        );
+
+        state.currentAudio = null;
+        state.currentAudioUrl = null;
+        state.audioPlaying = false;
+
+        setListening();
+
+        return;
+    }
+
+
+    // Lock playback immediately
+    state.audioPlaying = true;
+
+
+    // Remember current generation
     const myGeneration =
         state.audioGeneration;
+
+
+    // Take next sentence
+    const arrayBuffer =
+        state.audioQueue.shift();
+
+
+    console.log(
+        "PLAYING NEXT SENTENCE",
+        "generation:",
+        myGeneration,
+        "remaining:",
+        state.audioQueue.length
+    );
 
 
     try {
@@ -101,98 +185,142 @@ export async function playAudio(arrayBuffer) {
         );
 
 
-        state.currentAudioUrl =
+        const url =
             URL.createObjectURL(blob);
 
 
-        state.currentAudio =
-            new Audio(
-                state.currentAudioUrl
-            );
+        const audio =
+            new Audio(url);
 
 
-        state.currentAudio.preload =
-            "auto";
+        state.currentAudioUrl = url;
+        state.currentAudio = audio;
 
 
-        // ==============================
+        audio.preload = "auto";
+
+
+        // ====================================
         // AUDIO FINISHED
-        // ==============================
+        // ====================================
 
-        state.currentAudio.onended =
-            () => {
-
-                console.log(
-                    "AUDIO FINISHED"
-                );
-
-
-                if (
-                    state.currentAudioUrl
-                ) {
-
-                    URL.revokeObjectURL(
-                        state.currentAudioUrl
-                    );
-                }
-
-
-                state.currentAudio = null;
-
-                state.currentAudioUrl = null;
-
-                setListening();
-            };
-
-
-        // ==============================
-        // AUDIO ERROR
-        // ==============================
-
-        state.currentAudio.onerror =
-            (error) => {
-
-                console.error(
-                    " Audio playback error:",
-                    error
-                );
-
-                stopAssistantAudio();
-
-                setListening();
-            };
-
-
-        // ==============================
-        // INTERRUPTION CHECK
-        // ==============================
-
-        if (
-            myGeneration !==
-            state.audioGeneration
-        ) {
+        audio.onended = () => {
 
             console.log(
-                " Audio invalidated before playback"
+                " SENTENCE FINISHED"
             );
 
-            stopAssistantAudio();
 
-            return;
-        }
+            try {
 
+                URL.revokeObjectURL(url);
+
+            } catch (error) {
+
+                console.warn(
+                    "URL cleanup warning:",
+                    error
+                );
+            }
+
+
+            // Only clear our own audio object
+            if (
+                state.currentAudio === audio
+            ) {
+
+                state.currentAudio = null;
+                state.currentAudioUrl = null;
+            }
+
+
+            state.audioPlaying = false;
+
+
+            // User interrupted us
+            if (
+                myGeneration !==
+                state.audioGeneration
+            ) {
+
+                console.log(
+                    " OLD GENERATION - STOPPING QUEUE"
+                );
+
+                return;
+            }
+
+
+            // Continue with next sentence
+            playNextAudio();
+        };
+
+
+        // ====================================
+        // AUDIO ERROR
+        // ====================================
+
+        audio.onerror = (error) => {
+
+            console.error(
+                " Audio playback error:",
+                error
+            );
+
+
+            try {
+
+                URL.revokeObjectURL(url);
+
+            } catch (error) {
+
+                console.warn(
+                    "URL cleanup warning:",
+                    error
+                );
+            }
+
+
+            if (
+                state.currentAudio === audio
+            ) {
+
+                state.currentAudio = null;
+                state.currentAudioUrl = null;
+            }
+
+
+            state.audioPlaying = false;
+
+
+            // Don't continue an old response
+            if (
+                myGeneration !==
+                state.audioGeneration
+            ) {
+
+                return;
+            }
+
+
+            // Try next sentence
+            playNextAudio();
+        };
+
+
+        // ====================================
+        // START PLAYBACK
+        // ====================================
 
         setStatus("Speaking...");
 
 
         console.log(
-            " PLAYING ASSISTANT AUDIO",
-            "generation:",
-            myGeneration
+            " PLAYING AUDIO"
         );
 
 
-        await state.currentAudio.play();
+        await audio.play();
 
     } catch (error) {
 
@@ -201,8 +329,21 @@ export async function playAudio(arrayBuffer) {
             error
         );
 
-        stopAssistantAudio();
 
-        setListening();
+        state.currentAudio = null;
+        state.currentAudioUrl = null;
+        state.audioPlaying = false;
+
+
+        if (
+            myGeneration !==
+            state.audioGeneration
+        ) {
+
+            return;
+        }
+
+
+        playNextAudio();
     }
 }
