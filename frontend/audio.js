@@ -22,7 +22,6 @@ export function stopAssistantAudio() {
         state.audioGeneration
     );
 
-    // IMPORTANT:
     // Clear any sentences waiting to play
     state.audioQueue = [];
 
@@ -56,6 +55,7 @@ export function stopAssistantAudio() {
 
         state.currentAudio.onended = null;
         state.currentAudio.onerror = null;
+        state.currentAudio.onplaying = null;
 
         state.currentAudio = null;
     }
@@ -99,8 +99,21 @@ export function enqueueAudio(arrayBuffer) {
         "RECEIVED ASSISTANT AUDIO"
     );
 
-    // Add this sentence to queue
-    state.audioQueue.push(arrayBuffer);
+    // Record the exact time the browser
+    // received this audio chunk.
+    const receivedAt = performance.now();
+
+    console.log(
+        "Audio received at:",
+        receivedAt.toFixed(2),
+        "ms"
+    );
+
+    // Store both the audio and receive timestamp
+    state.audioQueue.push({
+        data: arrayBuffer,
+        receivedAt: receivedAt
+    });
 
     console.log(
         "Audio queue:",
@@ -128,7 +141,7 @@ async function playNextAudio() {
     if (state.audioPlaying) {
 
         console.log(
-            " Audio already playing"
+            "Audio already playing"
         );
 
         return;
@@ -161,9 +174,15 @@ async function playNextAudio() {
         state.audioGeneration;
 
 
-    // Take next sentence
-    const arrayBuffer =
+    // Take next audio item
+    const audioItem =
         state.audioQueue.shift();
+
+    const arrayBuffer =
+        audioItem.data;
+
+    const receivedAt =
+        audioItem.receivedAt;
 
 
     console.log(
@@ -201,13 +220,57 @@ async function playNextAudio() {
 
 
         // ====================================
+        // AUDIO ACTUALLY STARTED PLAYING
+        // ====================================
+
+        audio.onplaying = () => {
+
+            const playbackStartedAt =
+                performance.now();
+
+            const browserLatency =
+                playbackStartedAt - receivedAt;
+
+            console.log(
+                "================================"
+            );
+
+            console.log(
+                "AUDIO PLAYBACK STARTED"
+            );
+
+            console.log(
+                "Audio received:",
+                receivedAt.toFixed(2),
+                "ms"
+            );
+
+            console.log(
+                "Playback started:",
+                playbackStartedAt.toFixed(2),
+                "ms"
+            );
+
+            console.log(
+                "Browser queue/playback latency:",
+                browserLatency.toFixed(2),
+                "ms"
+            );
+
+            console.log(
+                "================================"
+            );
+        };
+
+
+        // ====================================
         // AUDIO FINISHED
         // ====================================
 
         audio.onended = () => {
 
             console.log(
-                " SENTENCE FINISHED"
+                "SENTENCE FINISHED"
             );
 
 
@@ -244,7 +307,7 @@ async function playNextAudio() {
             ) {
 
                 console.log(
-                    " OLD GENERATION - STOPPING QUEUE"
+                    "OLD GENERATION - STOPPING QUEUE"
                 );
 
                 return;
@@ -263,7 +326,7 @@ async function playNextAudio() {
         audio.onerror = (error) => {
 
             console.error(
-                " Audio playback error:",
+                "Audio playback error:",
                 error
             );
 
@@ -316,11 +379,27 @@ async function playNextAudio() {
 
 
         console.log(
-            " PLAYING AUDIO"
+            "PLAY REQUEST"
         );
 
 
+        const playStart =
+            performance.now();
+
+
         await audio.play();
+
+
+        const playResolved =
+            performance.now();
+
+
+        console.log(
+            "audio.play() resolved after:",
+            (playResolved - playStart).toFixed(2),
+            "ms"
+        );
+
 
     } catch (error) {
 

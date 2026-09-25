@@ -1,126 +1,111 @@
-import subprocess
-import tempfile
 import os
+import io
+import wave
 import threading
 
+import numpy as np
+from kokoro_onnx import Kokoro
 
-class PiperTTS:
+
+class KokoroTTS:
 
     def __init__(self):
 
-        self.piper = os.path.expanduser(
-            "~/piper/piper/piper"
+        self.model = os.path.expanduser(
+            "~/voice-agent/models/kokoro-v1.0.onnx"
         )
 
-        self.voice = os.path.expanduser(
-            "~/piper/en_US-lessac-high.onnx"
+        self.voices = os.path.expanduser(
+            "~/voice-agent/models/voices-v1.0.bin"
         )
-
-        self.process = None
 
         self.lock = threading.Lock()
 
-        print("Piper TTS ready.")
+        print("Loading Kokoro...")
+
+        self.kokoro = Kokoro(
+            self.model,
+            self.voices
+        )
+
+        print("Kokoro TTS ready.")
 
 
     def generate(self, text):
 
-        if not text.strip():
+        if not text or not text.strip():
             return b""
-
-        wav_file = None
 
         try:
 
-            with tempfile.NamedTemporaryFile(
-                suffix=".wav",
-                delete=False
-            ) as f:
-
-                wav_file = f.name
-
-
             with self.lock:
 
-                self.process = subprocess.Popen(
-                    [
-                        self.piper,
-                        "--model",
-                        self.voice,
-                        "--output_file",
-                        wav_file,
-                    ],
+                print(f"🎙 Kokoro: {text}")
 
-                    stdin=subprocess.PIPE,
-
-                    stdout=subprocess.DEVNULL,
-
-                    stderr=subprocess.DEVNULL,
+                samples, sample_rate = self.kokoro.create(
+                    text,
+                    voice="af_sky",
+                    speed=1.0,
+                    lang="en-us",
                 )
 
-
-            self.process.communicate(
-                input=text.encode("utf-8")
-            )
-
-
-            with self.lock:
-                self.process = None
-
-
-            if not os.path.exists(wav_file):
+            if samples is None:
                 return b""
 
+            # Convert to numpy
+            samples = np.asarray(
+                samples,
+                dtype=np.float32
+            )
 
-            with open(wav_file, "rb") as f:
-                return f.read()
+            # Prevent clipping
+            samples = np.clip(
+                samples,
+                -1.0,
+                1.0
+            )
+
+            # Float32 → PCM16
+            pcm = (
+                samples * 32767
+            ).astype(
+                np.int16
+            )
+
+            # Create WAV in memory
+            wav_buffer = io.BytesIO()
+
+            with wave.open(
+                wav_buffer,
+                "wb"
+            ) as wav:
+
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(sample_rate)
+
+                wav.writeframes(
+                    pcm.tobytes()
+                )
+
+            return wav_buffer.getvalue()
 
 
         except Exception as e:
 
             print(
-                f"Piper TTS error: {e}"
+                f"Kokoro TTS error: {e}"
             )
 
             return b""
 
 
-        finally:
-
-            with self.lock:
-                self.process = None
-
-
-            if (
-                wav_file
-                and os.path.exists(wav_file)
-            ):
-
-                try:
-                    os.remove(wav_file)
-
-                except Exception:
-                    pass
-
-
     def stop(self):
 
-        with self.lock:
+        # Kokoro runs inside the Python process,
+        # so there is no subprocess to kill.
 
-            if self.process is not None:
-
-                print(
-                    "🛑 Stopping Piper"
-                )
-
-                try:
-
-                    self.process.kill()
-
-                except Exception:
-                    pass
-
-                self.process = None
+        print("Kokoro stop requested.")
 
 
     def close(self):

@@ -1,16 +1,18 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from .vad import SileroVAD
-from .stt import MoonshineSTT
+# from .stt import MoonshineSTT
+from backend.parakeet_stt import ParakeetSTT
 from .llm import LocalLLM
-from .tts import PiperTTS
+# from .tts import PiperTTS
+from .tts import KokoroTTS
 import numpy as np
 import asyncio
 import threading
 import time
 
 SAMPLE_RATE = 16000
-SILENCE_DURATION = 0.7
+SILENCE_DURATION = 0.6
 VAD_CHUNK_SIZE = 512
 
 SILENCE_CHUNKS = int(
@@ -36,7 +38,8 @@ app.add_middleware(
 print("Loading AI models...")
 
 vad = SileroVAD()
-stt = MoonshineSTT()
+# stt = MoonshineSTT()
+stt = ParakeetSTT()
 
 print("All models loaded.")
 
@@ -135,7 +138,8 @@ async def websocket_endpoint(websocket: WebSocket):
     print("Client connected")
 
     session_llm = LocalLLM()
-    session_tts = PiperTTS()
+    # session_tts = PiperTTS()
+    session_tts = KokoroTTS()
 
     speech_audio = []
 
