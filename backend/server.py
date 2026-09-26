@@ -151,33 +151,46 @@ async def websocket_endpoint(websocket: WebSocket):
     # Every new user utterance gets a new generation ID.
     # Old responses become invalid immediately when the user speaks.
     generation = 0
+    # Buffer incoming browser audio until we have a full VAD chunk
+    audio_buffer = np.array([], dtype=np.float32)
 
     try:
 
         while True:
 
             data = await websocket.receive_bytes()
-
-            audio = np.frombuffer(
-                data,
-                dtype=np.float32
-            )
+            print("AUDIO RECEIVED:", len(data), "bytes")
+            audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
 
             if len(audio) == 0:
                 continue
+             # Add new audio to the persistent buffer
+            audio_buffer = np.concatenate([
+                audio_buffer,
+                audio
+            ])
 
-            for i in range(
-                0,
-                len(audio),
-                VAD_CHUNK_SIZE
-            ):
+            # Process complete VAD chunks
+            while len(audio_buffer) >= VAD_CHUNK_SIZE:
 
-                chunk = audio[
-                    i:i + VAD_CHUNK_SIZE
-                ]
+                chunk = audio_buffer[:VAD_CHUNK_SIZE]
 
-                if len(chunk) != VAD_CHUNK_SIZE:
-                    continue
+                audio_buffer = audio_buffer[VAD_CHUNK_SIZE:]
+
+
+
+            # for i in range(
+            #     0,
+            #     len(audio),
+            #     VAD_CHUNK_SIZE
+            # ):
+
+                # chunk = audio[
+                #     i:i + VAD_CHUNK_SIZE
+                # ]
+
+                # if len(chunk) != VAD_CHUNK_SIZE:
+                #     continue
 
                 probability = vad.speech_probability(
                     chunk
