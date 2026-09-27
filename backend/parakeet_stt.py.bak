@@ -8,11 +8,11 @@ class ParakeetSTT:
         print("Loading Parakeet TDT 0.6B runtime...")
 
         self.lib_path = os.path.expanduser(
-            "~/parrot/NeMo-Speech.cpp/build/bin/libnemo_speech_asr_c.so"
+            "~/NeMo-Speech.cpp/build/bin/libnemo_speech_asr_c.so"
         )
 
         self.model_path = os.path.expanduser(
-            "~/parrot/models/parakeet/parakeet-tdt-0.6b-v3-asr-q8_0.gguf"
+            "~/voice-agent/models/parakeet/parakeet-tdt-0.6b-v3.q8_0.gguf"
         )
 
         if not os.path.exists(self.lib_path):
@@ -72,7 +72,7 @@ class ParakeetSTT:
 
         print("Parakeet loaded.")
         print(f"Model: {self.model_path}")
-        print("Backend: CUDA GPU 0")
+        print("Backend: Vulkan GPU 0")
         print("Runtime: persistent")
 
     def _setup_api(self):

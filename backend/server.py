@@ -159,7 +159,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
 
             data = await websocket.receive_bytes()
-            print("AUDIO RECEIVED:", len(data), "bytes")
+            # print("AUDIO RECEIVED:", len(data), "bytes")
             audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
 
             if len(audio) == 0:
@@ -292,7 +292,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Capture the generation for
                         # THIS utterance.
                         utterance_generation = generation
-
+                        session_tts.reset()
                         print(
                             "Processing generation:",
                             utterance_generation
@@ -670,3 +670,10 @@ async def process_utterance(
 
         except Exception:
             pass
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "backend.server:app",
+        host="0.0.0.0",
+        port=8000,
+    )

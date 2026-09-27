@@ -9,7 +9,7 @@ import {
 import {
     connectWebSocket,
     sendAudio
-} from "./websocket.js";
+} from "./websocket.js?v=2";
 
 import {
     startMicrophone

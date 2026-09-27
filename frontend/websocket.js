@@ -25,7 +25,7 @@ export function connectWebSocket() {
 
             state.websocket =
                 new WebSocket(
-                    "ws://127.0.0.1:8000/ws"
+                    `wss://${window.location.hostname}/proxy/8000/ws`
                 );
 
 
