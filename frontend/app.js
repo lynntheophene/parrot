@@ -17,26 +17,25 @@ import {
 
 
 const startButton =
-    document.getElementById(
-        "startButton"
-    );
+    document.getElementById("startButton");
+
+const stopButton =
+    document.getElementById("stopButton");
 
 
 const CONTROL_API =
     "https://parrot-worker.parrot-control.workers.dev";
 
 
+// ========================================
+// START
+// ========================================
+
 async function startConversation() {
 
-    console.log(
-        "Starting voice assistant..."
-    );
+    console.log("Starting voice assistant...");
 
-
-    setStatus(
-        "Starting Parrot..."
-    );
-
+    setStatus("Starting Parrot...");
 
     try {
 
@@ -48,7 +47,6 @@ async function startConversation() {
             "Requesting Parrot instance..."
         );
 
-
         const response =
             await fetch(
                 `${CONTROL_API}/start`,
@@ -57,7 +55,6 @@ async function startConversation() {
                 }
             );
 
-
         if (!response.ok) {
 
             throw new Error(
@@ -65,16 +62,13 @@ async function startConversation() {
             );
         }
 
-
         const data =
             await response.json();
-
 
         console.log(
             "Start response:",
             data
         );
-
 
         if (
             !data.ready ||
@@ -86,10 +80,8 @@ async function startConversation() {
             );
         }
 
-
         const endpoint =
             data.endpoint;
-
 
         console.log(
             "Parrot endpoint:",
@@ -97,14 +89,13 @@ async function startConversation() {
         );
 
 
-        setStatus(
-            "Connecting to Parrot..."
-        );
-
-
         // ==========================
         // WEBSOCKET
         // ==========================
+
+        setStatus(
+            "Connecting to Parrot..."
+        );
 
         await connectWebSocket(
             endpoint
@@ -119,24 +110,25 @@ async function startConversation() {
             "Starting microphone..."
         );
 
-
         await startMicrophone(
             sendAudio
         );
 
 
+        // ==========================
+        // UI
+        // ==========================
+
         state.started = true;
 
-
-        disableStartButton();
+        startButton.disabled = true;
+        stopButton.disabled = false;
 
         startOrb();
-
 
         setStatus(
             "Connected — speak normally"
         );
-
 
         console.log(
             "Voice assistant ready"
@@ -150,14 +142,131 @@ async function startConversation() {
             error
         );
 
-
         setStatus(
             "Failed to start: " +
+            error.message
+        );
+
+        startButton.disabled = false;
+        stopButton.disabled = true;
+    }
+}
+
+
+// ========================================
+// STOP
+// ========================================
+
+async function stopConversation() {
+
+    console.log(
+        "Stopping Parrot..."
+    );
+
+    setStatus(
+        "Stopping Parrot..."
+    );
+
+
+    try {
+
+        // ==========================
+        // CLOSE WEBSOCKET
+        // ==========================
+
+        if (state.websocket) {
+
+            console.log(
+                "Closing WebSocket..."
+            );
+
+            state.websocket.close();
+
+            state.websocket = null;
+        }
+
+
+        // ==========================
+        // STOP CLOUD INSTANCE
+        // ==========================
+
+        console.log(
+            "Requesting Parrot shutdown..."
+        );
+
+        const response =
+            await fetch(
+                `${CONTROL_API}/stop`,
+                {
+                    method: "POST"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                `Stop request failed: ${response.status}`
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "Stop response:",
+            data
+        );
+
+
+        // ==========================
+        // STATE
+        // ==========================
+
+        state.started = false;
+
+        startButton.disabled = false;
+        stopButton.disabled = true;
+
+
+        setStatus(
+            "Parrot stopped"
+        );
+
+
+        console.log(
+            "Parrot stopped"
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Failed to stop Parrot:",
+            error
+        );
+
+        setStatus(
+            "Failed to stop: " +
             error.message
         );
     }
 }
 
 
+// ========================================
+// BUTTONS
+// ========================================
+
 startButton.onclick =
     startConversation;
+
+stopButton.onclick =
+    stopConversation;
+
+
+// Initial state
+
+stopButton.disabled = true;

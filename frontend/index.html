@@ -1,52 +1,187 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>AI Voice Assistant</title>
+    <title>Parrot — AI Voice Assistant</title>
 
-    <link rel="stylesheet" href="style.css">
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
 </head>
+
 
 <body>
 
-    <div class="container">
+    <main class="page">
 
-        <h1>AI Voice Assistant</h1>
+        <!-- HEADER -->
 
-        <div class="subtitle">
-            Talk naturally with your AI assistant
-        </div>
+        <header class="header">
 
-        <div id="orb" class="orb">
-            <div class="mic">
-                
+            <div class="brand">
+                Parrot
             </div>
-        </div>
 
-        <button id="startButton">
-            Start Conversation
-        </button>
+            <div class="header-status">
+                <span class="status-dot"></span>
+                AI Voice Assistant
+            </div>
 
-        <div id="status" class="status">
-            Ready
-        </div>
+        </header>
 
-        <div
-            id="conversation"
-            class="conversation"
-        ></div>
 
-    </div>
+        <!-- HERO -->
+
+        <section class="hero">
+
+            <div class="eyebrow">
+                REAL-TIME VOICE AI
+            </div>
+
+            <h1>
+                Talk naturally.
+                <br>
+                <span>Let Parrot listen.</span>
+            </h1>
+
+            <p class="subtitle">
+                A real-time conversational AI assistant
+                powered by speech recognition, language models,
+                and neural voice synthesis.
+            </p>
+
+
+            <!-- VOICE ORB -->
+
+            <div
+                id="orb"
+                class="orb"
+            >
+
+                <div class="orb-inner">
+
+                    <div class="mic">
+                        🎙
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- STATUS -->
+
+            <div
+                id="status"
+                class="status"
+            >
+
+                <span class="status-indicator"></span>
+
+                Ready to talk
+
+            </div>
+
+
+            <!-- CONTROLS -->
+
+            <div class="controls">
+
+                <button
+                    id="startButton"
+                    class="button primary"
+                >
+                    Start Conversation
+                </button>
+
+                <button
+                    id="stopButton"
+                    class="button secondary"
+                    disabled
+                >
+                    Stop
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- CONVERSATION -->
+
+        <section class="conversation-section">
+
+            <div class="conversation-header">
+
+                <div>
+
+                    <h2>
+                        Conversation
+                    </h2>
+
+                    <p>
+                        Your conversation will appear here.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div
+                id="conversation"
+                class="conversation"
+            >
+
+                <div class="empty-state">
+
+                    <div class="empty-icon">
+                        ✦
+                    </div>
+
+                    <div>
+                        Start a conversation to begin.
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- FOOTER -->
+
+        <footer>
+
+            <span>
+                Parrot AI
+            </span>
+
+            <span>
+                Real-time voice interaction
+            </span>
+
+        </footer>
+
+    </main>
+
 
     <script
-    type="module"
-    src="app.js?v=2"
+        type="module"
+        src="app.js?v=3"
     ></script>
 
 </body>
+
 </html>
