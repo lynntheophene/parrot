@@ -2,14 +2,16 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from .vad import SileroVAD
 # from .stt import MoonshineSTT
-from backend.parakeet_stt import ParakeetSTT
+# from backend.parakeet_stt import ParakeetSTT
 from .llm import LocalLLM
 # from .tts import PiperTTS
-from .tts import KokoroTTS
+# from .tts import KokoroTTS
 import numpy as np
 import asyncio
 import threading
 import time
+from .session_manager import SessionManager
+from .model_manager import ModelManager
 
 SAMPLE_RATE = 16000
 SILENCE_DURATION = 0.6
@@ -19,11 +21,35 @@ SILENCE_CHUNKS = int(
     SILENCE_DURATION * SAMPLE_RATE / VAD_CHUNK_SIZE
 )
 
+class SessionTTS:
 
+    def __init__(self, shared_tts):
+        self.shared_tts = shared_tts
+        self.stop_event = threading.Event()
+
+    def generate(self, text):
+        return self.shared_tts.generate(
+            text,
+            self.stop_event
+        )
+
+    def stop(self):
+        print("Kokoro session stop requested.")
+        self.stop_event.set()
+
+    def reset(self):
+        self.stop_event.clear()
+
+    def close(self):
+        self.stop()
 
 app = FastAPI(
     title="Voice Agent API",
     version="0.1.0"
+)
+
+session_manager = SessionManager(
+    max_sessions=5
 )
 
 app.add_middleware(
@@ -38,9 +64,10 @@ app.add_middleware(
 print("Loading AI models...")
 
 vad = SileroVAD()
-# stt = MoonshineSTT()
-stt = ParakeetSTT()
-
+# # stt = MoonshineSTT()
+# stt = ParakeetSTT()
+models = ModelManager()
+# llm = LocalLLM()
 print("All models loaded.")
 
 
@@ -132,14 +159,30 @@ async def sentence_chunks_async(token_stream):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-
+    session_id = None
     await websocket.accept()
 
-    print("Client connected")
-
+    session_id = session_manager.create_session()
     session_llm = LocalLLM()
+
+    if session_id is None:
+        await websocket.send_json({
+            "type": "busy",
+            "message": "Jarvis is busy. Try again later."
+        })
+
+        await websocket.close()
+        return
+
+    print(
+        f"Client connected: {session_id}"
+    )
+
+    # session_llm = LocalLLM()
     # session_tts = PiperTTS()
-    session_tts = KokoroTTS()
+    # session_tts = KokoroTTS()
+    shared_tts = models.get_tts()
+    session_tts = SessionTTS(shared_tts)
 
     speech_audio = []
 
@@ -303,6 +346,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 websocket,
                                 utterance,
                                 session_llm,
+                                models.get_stt(),
                                 session_tts,
                                 utterance_generation,
                                 lambda: generation
@@ -321,18 +365,25 @@ async def websocket_endpoint(websocket: WebSocket):
 
     finally:
 
-        print("Cleaning up session")
+        print(
+            f"Cleaning up session {session_id}"
+        )
 
-        session_tts.stop()
+        if session_tts is not None:
+            session_tts.stop()
+
+            session_tts.close()
 
         if (
             processing_task is not None
             and not processing_task.done()
         ):
-
             processing_task.cancel()
 
-        session_tts.close()
+        if session_id is not None:
+            session_manager.delete_session(
+                session_id
+            )
 
         print("Session cleaned up")
 
@@ -393,6 +444,7 @@ async def process_utterance(
     websocket,
     audio,
     llm,
+    stt,
     tts,
     my_generation,
     get_generation

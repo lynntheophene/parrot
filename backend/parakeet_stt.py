@@ -8,7 +8,7 @@ class ParakeetSTT:
         print("Loading Parakeet TDT 0.6B runtime...")
 
         self.lib_path = os.path.expanduser(
-            "~/parrot/NeMo-Speech.cpp/build/bin/libnemo_speech_asr_c.so"
+            "~/parrot/NeMo-Speech.cpp/build/cuda-asr/bin/libnemo_speech_asr_c.so"
         )
 
         self.model_path = os.path.expanduser(

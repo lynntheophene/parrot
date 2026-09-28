@@ -2,69 +2,72 @@ import os
 import io
 import wave
 import threading
-os.environ["ONNX_PROVIDER"] = "CUDAExecutionProvider"
+
 import numpy as np
-from kokoro_onnx import Kokoro
+from kokoro import KPipeline
 
 
 class KokoroTTS:
 
     def __init__(self):
 
-        self.model = os.path.expanduser(
-            "~/parrot/models/kokoro/kokoro-v1.0.onnx"
-        )
-
-        self.voices = os.path.expanduser(
-            "~/parrot/models/kokoro/voices-v1.0.bin"
-        )
-
-        self.lock = threading.Lock()
-
-        # Used to invalidate TTS work when the user interrupts.
-        self.stop_event = threading.Event()
-
         print("Loading Kokoro...")
 
-        self.kokoro = Kokoro(
-            self.model,
-            self.voices,
+        self.kokoro = KPipeline(
+            lang_code="a",
+            repo_id="hexgrad/Kokoro-82M",
+            device="cuda"
         )
+
+        # One lock for the shared model.
+        # Only one Kokoro inference runs at a time.
+        self.lock = threading.Lock()
 
         print("Kokoro TTS ready.")
 
-    def generate(self, text):
+    def generate(self, text, stop_event):
 
         if not text or not text.strip():
             return b""
 
-        # Don't start new TTS work after interruption.
-        if self.stop_event.is_set():
+        # Don't start TTS if this user's request
+        # has already been interrupted.
+        if stop_event.is_set():
             print("🎙 Kokoro generation skipped — interrupted.")
             return b""
 
         try:
 
+            # Shared model -> protected by global lock.
             with self.lock:
 
-                # Check again after acquiring the lock.
-                if self.stop_event.is_set():
-                    print("🎙 Kokoro generation cancelled before inference.")
+                # Check again after waiting for the lock.
+                if stop_event.is_set():
+                    print(
+                        "🎙 Kokoro generation cancelled before inference."
+                    )
                     return b""
 
                 print(f"🎙 Kokoro: {text}")
 
-                samples, sample_rate = self.kokoro.create(
-                    text,
-                    voice="af_sky",
-                    speed=1.0,
-                    lang="en-us",
+                result = next(
+                    self.kokoro(
+                        text,
+                        voice="af_sky",
+                        speed=1.0
+                    )
                 )
 
-            # Inference itself cannot currently be force-killed,
-            # but its result can be discarded immediately.
-            if self.stop_event.is_set():
-                print("🎙 Kokoro result discarded — interrupted.")
+            samples = result.audio
+            sample_rate = 24000
+
+            # The inference itself cannot currently be
+            # force-killed, but we can discard its result
+            # if THIS user's request was interrupted.
+            if stop_event.is_set():
+                print(
+                    "🎙 Kokoro result discarded — interrupted."
+                )
                 return b""
 
             if samples is None:
@@ -102,9 +105,11 @@ class KokoroTTS:
                     pcm.tobytes()
                 )
 
-            # Final cancellation check before returning audio.
-            if self.stop_event.is_set():
-                print("🎙 Kokoro WAV discarded — interrupted.")
+            # Final check for THIS user.
+            if stop_event.is_set():
+                print(
+                    "🎙 Kokoro WAV discarded — interrupted."
+                )
                 return b""
 
             return wav_buffer.getvalue()
@@ -117,21 +122,10 @@ class KokoroTTS:
 
             return b""
 
-    def stop(self):
-
-        print("Kokoro stop requested.")
-
-        # Invalidate the currently running generation.
-        self.stop_event.set()
-
-    def reset(self):
-
-        # Allow the next response to generate TTS again.
-        self.stop_event.clear()
-
     def close(self):
+        """
+        The Kokoro model is global/shared.
 
-        self.stop()
-
-
-    
+        Do NOT unload it when a user disconnects.
+        """
+        pass
