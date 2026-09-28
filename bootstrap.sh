@@ -86,11 +86,8 @@ echo "[5/5] Starting Parrot..."
 # ======================================
 
 if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
-
     echo "llama-server already running."
-
 else
-
     echo "Starting llama-server..."
 
     nohup "$PROJECT/llama.cpp/build/bin/llama-server" \
@@ -102,12 +99,11 @@ else
 
     echo "Waiting for llama-server..."
 
-    for i in {1..30}; do
+    for i in {1..60}; do
         if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
             echo "llama-server ready."
             break
         fi
-
         sleep 1
     done
 
@@ -116,44 +112,6 @@ else
         tail -30 "$PROJECT/llama-server.log"
         exit 1
     fi
-
-fi
-
-
-# ======================================
-# BACKEND
-# ======================================
-
-if curl -sf http://127.0.0.1:8000/docs >/dev/null 2>&1; then
-
-    echo "Backend already running."
-
-else
-
-    echo "Starting backend..."
-
-    nohup "$PYTHON" -m uvicorn backend.server:app \
-        --host 0.0.0.0 \
-        --port 8000 \
-        > "$PROJECT/backend.log" 2>&1 &
-
-    echo "Waiting for backend..."
-
-    for i in {1..30}; do
-        if curl -sf http://127.0.0.1:8000/docs >/dev/null 2>&1; then
-            echo "Backend ready."
-            break
-        fi
-
-        sleep 1
-    done
-
-    if ! curl -sf http://127.0.0.1:8000/docs >/dev/null 2>&1; then
-        echo "ERROR: Backend failed to start."
-        tail -50 "$PROJECT/backend.log"
-        exit 1
-    fi
-
 fi
 
 
@@ -162,11 +120,8 @@ fi
 # ======================================
 
 if curl -sf http://127.0.0.1:3000/ >/dev/null 2>&1; then
-
     echo "Frontend already running."
-
 else
-
     echo "Starting frontend..."
 
     nohup "$PYTHON" -m http.server 3000 \
@@ -174,23 +129,55 @@ else
         --bind 0.0.0.0 \
         > "$PROJECT/frontend.log" 2>&1 &
 
-    echo "Waiting for frontend..."
+    sleep 2
 
-    for i in {1..15}; do
-        if curl -sf http://127.0.0.1:3000/ >/dev/null 2>&1; then
-            echo "Frontend ready."
+    if curl -sf http://127.0.0.1:3000/ >/dev/null 2>&1; then
+        echo "Frontend ready."
+    else
+        echo "WARNING: Frontend failed to start."
+        tail -30 "$PROJECT/frontend.log"
+    fi
+fi
+
+
+# ======================================
+# BACKEND
+# ======================================
+
+if curl -sf http://127.0.0.1:8000/docs >/dev/null 2>&1; then
+    echo "Backend already running."
+else
+    echo "Starting backend..."
+
+    nohup "$PYTHON" -m uvicorn backend.server:app \
+        --host 0.0.0.0 \
+        --port 8000 \
+        > "$PROJECT/backend.log" 2>&1 &
+
+    echo "Waiting for backend models to load..."
+
+    BACKEND_READY=0
+
+    for i in {1..180}; do
+        if curl -sf http://127.0.0.1:8000/docs >/dev/null 2>&1; then
+            BACKEND_READY=1
+            echo "Backend ready."
             break
         fi
 
         sleep 1
+
+        if (( i % 15 == 0 )); then
+            echo "Backend still loading... ${i}s"
+        fi
     done
 
-    if ! curl -sf http://127.0.0.1:3000/ >/dev/null 2>&1; then
-        echo "ERROR: Frontend failed to start."
-        tail -30 "$PROJECT/frontend.log"
-        exit 1
+    if [ "$BACKEND_READY" -ne 1 ]; then
+        echo "WARNING: Backend is still not ready after 180 seconds."
+        echo "The process may still be loading models."
+        echo "Check:"
+        echo "  $PROJECT/backend.log"
     fi
-
 fi
 
 

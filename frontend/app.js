@@ -9,7 +9,7 @@ import {
 import {
     connectWebSocket,
     sendAudio
-} from "./websocket.js?v=2";
+} from "./websocket.js?v=3";
 
 import {
     startMicrophone
@@ -22,30 +22,103 @@ const startButton =
     );
 
 
+const CONTROL_API =
+    "https://parrot-worker.parrot-control.workers.dev";
+
+
 async function startConversation() {
 
     console.log(
-        " Starting voice assistant..."
+        "Starting voice assistant..."
     );
 
 
     setStatus(
-        "Requesting microphone..."
+        "Starting Parrot..."
     );
 
 
     try {
 
         // ==========================
+        // START CLOUD INSTANCE
+        // ==========================
+
+        console.log(
+            "Requesting Parrot instance..."
+        );
+
+
+        const response =
+            await fetch(
+                `${CONTROL_API}/start`,
+                {
+                    method: "POST"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                `Start request failed: ${response.status}`
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "Start response:",
+            data
+        );
+
+
+        if (
+            !data.ready ||
+            !data.endpoint
+        ) {
+
+            throw new Error(
+                "Parrot backend is not ready"
+            );
+        }
+
+
+        const endpoint =
+            data.endpoint;
+
+
+        console.log(
+            "Parrot endpoint:",
+            endpoint
+        );
+
+
+        setStatus(
+            "Connecting to Parrot..."
+        );
+
+
+        // ==========================
         // WEBSOCKET
         // ==========================
 
-        await connectWebSocket();
+        await connectWebSocket(
+            endpoint
+        );
 
 
         // ==========================
         // MICROPHONE
         // ==========================
+
+        setStatus(
+            "Starting microphone..."
+        );
+
 
         await startMicrophone(
             sendAudio
@@ -66,20 +139,21 @@ async function startConversation() {
 
 
         console.log(
-            " Voice assistant ready"
+            "Voice assistant ready"
         );
 
 
     } catch (error) {
 
         console.error(
-            " Failed to start assistant:",
+            "Failed to start assistant:",
             error
         );
 
 
         setStatus(
-            "Failed to start"
+            "Failed to start: " +
+            error.message
         );
     }
 }

@@ -13,113 +13,109 @@ import {
 } from "./audio.js";
 
 
-export function connectWebSocket() {
+export function connectWebSocket(endpoint) {
 
-    return new Promise(
-        (resolve, reject) => {
+    return new Promise((resolve, reject) => {
 
-            console.log(
-                " Connecting WebSocket..."
-            );
+        console.log("Connecting WebSocket...");
 
+        // Convert HTTP endpoint to WebSocket endpoint
+        const wsEndpoint =
+            endpoint
+                .replace(/^https:\/\//, "wss://")
+                .replace(/^http:\/\//, "ws://")
+                .replace(/\/$/, "");
 
-            state.websocket =
-                new WebSocket(
-                    `wss://${window.location.hostname}/proxy/8000/ws`
-                );
+        const wsUrl = `${wsEndpoint}/ws`;
 
+        console.log("Connecting to:", wsUrl);
 
-            state.websocket.binaryType =
-                "arraybuffer";
+        state.websocket = new WebSocket(wsUrl);
 
-
-            // ==========================
-            // OPEN
-            // ==========================
-
-            state.websocket.onopen =
-                () => {
-
-                    console.log(
-                        " WebSocket connected"
-                    );
-
-                    resolve();
-                };
+        state.websocket.binaryType = "arraybuffer";
 
 
-            // ==========================
-            // MESSAGE
-            // ==========================
+        // ==========================
+        // OPEN
+        // ==========================
 
-            state.websocket.onmessage =
-                async (event) => {
+        state.websocket.onopen = () => {
 
-                    // JSON
-                    if (
-                        typeof event.data ===
-                        "string"
-                    ) {
+            console.log("WebSocket connected");
 
-                        const message =
-                            JSON.parse(
-                                event.data
-                            );
-
-                        handleMessage(
-                            message
-                        );
-
-                        return;
-                    }
+            resolve();
+        };
 
 
-                    // Binary WAV
-                    enqueueAudio(
-                        event.data
-                    );
-                };
+        // ==========================
+        // MESSAGE
+        // ==========================
 
+        state.websocket.onmessage = async (event) => {
 
-            // ==========================
-            // ERROR
-            // ==========================
+            // JSON message
+            if (typeof event.data === "string") {
 
-            state.websocket.onerror =
-                (error) => {
+                try {
+
+                    const message = JSON.parse(event.data);
+
+                    handleMessage(message);
+
+                } catch (error) {
 
                     console.error(
-                        " WebSocket error:",
+                        "Invalid JSON from server:",
+                        event.data,
                         error
                     );
+                }
 
-                    setStatus(
-                        "Connection error"
-                    );
-
-                    reject(error);
-                };
+                return;
+            }
 
 
-            // ==========================
-            // CLOSE
-            // ==========================
+            // Binary audio from server
+            console.log(
+                "Received audio:",
+                event.data.byteLength,
+                "bytes"
+            );
 
-            state.websocket.onclose =
-                () => {
+            enqueueAudio(event.data);
+        };
 
-                    console.log(
-                        " WebSocket closed"
-                    );
 
-                    stopAssistantAudio();
+        // ==========================
+        // ERROR
+        // ==========================
 
-                    setStatus(
-                        "Disconnected"
-                    );
-                };
-        }
-    );
+        state.websocket.onerror = (error) => {
+
+            console.error(
+                "WebSocket error:",
+                error
+            );
+
+            setStatus("Connection error");
+
+            reject(error);
+        };
+
+
+        // ==========================
+        // CLOSE
+        // ==========================
+
+        state.websocket.onclose = () => {
+
+            console.log("WebSocket closed");
+
+            stopAssistantAudio();
+
+            setStatus("Disconnected");
+        };
+    });
 }
 
 
@@ -127,12 +123,17 @@ export function sendAudio(buffer) {
 
     if (
         !state.websocket ||
-        state.websocket.readyState !==
-        WebSocket.OPEN
+        state.websocket.readyState !== WebSocket.OPEN
     ) {
+        console.warn("WebSocket not open - audio not sent");
         return;
     }
 
+    console.log(
+        "Sending audio:",
+        buffer.byteLength,
+        "bytes"
+    );
 
     state.websocket.send(buffer);
 }
@@ -140,10 +141,7 @@ export function sendAudio(buffer) {
 
 function handleMessage(message) {
 
-    console.log(
-        " SERVER:",
-        message
-    );
+    console.log("SERVER:", message);
 
 
     switch (message.type) {
@@ -156,7 +154,7 @@ function handleMessage(message) {
         case "interrupt":
 
             console.log(
-                " INTERRUPT",
+                "INTERRUPT",
                 message.generation
             );
 
@@ -173,9 +171,7 @@ function handleMessage(message) {
 
         case "speech_start":
 
-            console.log(
-                "SPEECH START"
-            );
+            console.log("SPEECH START");
 
             stopAssistantAudio();
 
@@ -192,28 +188,17 @@ function handleMessage(message) {
 
             setProcessing();
 
+            if (message.stage === "stt") {
 
-            if (
-                message.stage === "stt"
-            ) {
+                setStatus("Understanding...");
 
-                setStatus(
-                    "Understanding..."
-                );
+            } else if (message.stage === "llm") {
 
-            } else if (
-                message.stage === "llm"
-            ) {
-
-                setStatus(
-                    "Thinking..."
-                );
+                setStatus("Thinking...");
 
             } else {
 
-                setStatus(
-                    "Preparing response..."
-                );
+                setStatus("Preparing response...");
             }
 
             break;
@@ -238,11 +223,12 @@ function handleMessage(message) {
         // ==========================
 
         case "response_chunk":
+
             addMessage(
                 "Assistant",
                 message.text
             );
-            
+
             break;
 
 
