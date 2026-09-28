@@ -12,7 +12,7 @@ class ParakeetSTT:
         )
 
         self.model_path = os.path.expanduser(
-            "~/parrot/models/parakeet/parakeet-tdt-0.6b-v3-asr-q8_0.gguf"
+            "/home/parrot/models/parakeet/parakeet-tdt-0.6b-v3-asr-q8_0.gguf"
         )
 
         if not os.path.exists(self.lib_path):
