@@ -8,10 +8,12 @@ from .llm import LocalLLM
 # from .tts import KokoroTTS
 import numpy as np
 import asyncio
+import uuid
 import threading
 import time
 from .session_manager import SessionManager
 from .model_manager import ModelManager
+import requests
 
 SAMPLE_RATE = 16000
 SILENCE_DURATION = 0.6
@@ -20,6 +22,22 @@ VAD_CHUNK_SIZE = 512
 SILENCE_CHUNKS = int(
     SILENCE_DURATION * SAMPLE_RATE / VAD_CHUNK_SIZE
 )
+
+CONTROL_URL = "https://parrot-worker.parrot-control.workers.dev"
+
+def _notify_control(path):
+    try:
+        requests.post(
+            f"{CONTROL_URL}{path}",
+            timeout=3
+        )
+    except Exception as e:
+        print(f"Control notification failed ({path}): {e}")
+
+
+async def notify_control(path):
+    await asyncio.to_thread(_notify_control, path)
+
 
 class SessionTTS:
 
@@ -252,6 +270,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     print("INTERRUPTING CURRENT RESPONSE")
                     print("================================")
 
+                    await notify_control("/activity")
+
                     speaking = True
 
                     speech_audio = [chunk]
@@ -340,7 +360,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "Processing generation:",
                             utterance_generation
                         )
-
+                        request_id = str(uuid.uuid4())
                         processing_task = asyncio.create_task(
                             process_utterance(
                                 websocket,
@@ -349,7 +369,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 models.get_stt(),
                                 session_tts,
                                 utterance_generation,
-                                lambda: generation
+                                lambda: generation,
+                                request_id
                             )
                         )
 
@@ -447,9 +468,13 @@ async def process_utterance(
     stt,
     tts,
     my_generation,
-    get_generation
+    get_generation,
+    request_id
 ):
     try:
+        await notify_control(
+        f"/request-start?request_id={request_id}"
+        )
         request_start = time.perf_counter()
 
         # =========================
@@ -697,35 +722,32 @@ async def process_utterance(
             "type": "done"
         })
 
-    except asyncio.CancelledError:
+        except asyncio.CancelledError:
 
-        print(
-            f"Processing cancelled "
-            f"(generation {my_generation})"
-        )
+            print(
+                f"Processing cancelled "
+                f"(generation {my_generation})"
+            )
 
-        tts.stop()
-        raise
+            tts.stop()
+            raise
 
-    except Exception as e:
+        except Exception as e:
 
-        print(
-            f"Processing error: {e}"
-        )
+            print(
+                f"Processing error: {e}"
+            )
 
-        try:
+            try:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(e)
+                })
+            except Exception:
+                pass
 
-            await websocket.send_json({
-                "type": "error",
-                "message": str(e)
-            })
+        finally:
 
-        except Exception:
-            pass
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "backend.server:app",
-        host="0.0.0.0",
-        port=8000,
-    )
+            await notify_control(
+                f"/request-end?request_id={request_id}"
+            )

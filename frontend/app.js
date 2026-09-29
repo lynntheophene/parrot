@@ -2,7 +2,6 @@ import { state } from "./state.js";
 
 import {
     setStatus,
-    disableStartButton,
     startOrb
 } from "./ui.js";
 
@@ -18,9 +17,6 @@ import {
 
 const startButton =
     document.getElementById("startButton");
-
-const stopButton =
-    document.getElementById("stopButton");
 
 
 const CONTROL_API =
@@ -122,7 +118,6 @@ async function startConversation() {
         state.started = true;
 
         startButton.disabled = true;
-        stopButton.disabled = false;
 
         startOrb();
 
@@ -148,125 +143,13 @@ async function startConversation() {
         );
 
         startButton.disabled = false;
-        stopButton.disabled = true;
     }
 }
 
 
 // ========================================
-// STOP
-// ========================================
-
-async function stopConversation() {
-
-    console.log(
-        "Stopping Parrot..."
-    );
-
-    setStatus(
-        "Stopping Parrot..."
-    );
-
-
-    try {
-
-        // ==========================
-        // CLOSE WEBSOCKET
-        // ==========================
-
-        if (state.websocket) {
-
-            console.log(
-                "Closing WebSocket..."
-            );
-
-            state.websocket.close();
-
-            state.websocket = null;
-        }
-
-
-        // ==========================
-        // STOP CLOUD INSTANCE
-        // ==========================
-
-        console.log(
-            "Requesting Parrot shutdown..."
-        );
-
-        const response =
-            await fetch(
-                `${CONTROL_API}/stop`,
-                {
-                    method: "POST"
-                }
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                `Stop request failed: ${response.status}`
-            );
-        }
-
-
-        const data =
-            await response.json();
-
-
-        console.log(
-            "Stop response:",
-            data
-        );
-
-
-        // ==========================
-        // STATE
-        // ==========================
-
-        state.started = false;
-
-        startButton.disabled = false;
-        stopButton.disabled = true;
-
-
-        setStatus(
-            "Parrot stopped"
-        );
-
-
-        console.log(
-            "Parrot stopped"
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "Failed to stop Parrot:",
-            error
-        );
-
-        setStatus(
-            "Failed to stop: " +
-            error.message
-        );
-    }
-}
-
-
-// ========================================
-// BUTTONS
+// BUTTON
 // ========================================
 
 startButton.onclick =
     startConversation;
-
-stopButton.onclick =
-    stopConversation;
-
-
-// Initial state
-
-stopButton.disabled = true;

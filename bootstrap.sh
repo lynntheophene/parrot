@@ -3,7 +3,7 @@
 set -e
 
 PROJECT="/home/parrot"
-PYTHON="/root/miniconda3/envs/py3.10/bin/python3"
+PYTHON="/home/parrot/.venv/bin/python"
 
 cd "$PROJECT"
 
